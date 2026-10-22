@@ -83,6 +83,18 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+func (s *server) routes() http.Handler {
+	mux := http.NewServeMux()
+
+	// Endpoints
+	mux.HandleFunc("GET /api/health", handleHealth)
+	mux.HandleFunc("POST /api/tickets", s.handleCreateTicket)
+	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
+	mux.HandleFunc("GET /api/tickets", s.handleGetTickets)
+
+	return mux
+}
+
 func main() {
 	name := "Triage"
 	fmt.Printf("%s starting...\n", name)
@@ -92,14 +104,8 @@ func main() {
 
 	log.Printf("openai key set: %t", cfg.OpenAIAPIKey != "")
 
-	mux := http.NewServeMux()
 	srv := &server{tickets: store.NewMemoryStore()}
-
-	// Endpoints
-	mux.HandleFunc("GET /api/health", handleHealth)
-	mux.HandleFunc("POST /api/tickets", srv.handleCreateTicket)
-	mux.HandleFunc("GET /api/tickets/{id}", srv.handleGetTicket)
-	mux.HandleFunc("GET /api/tickets", srv.handleGetTickets)
+	mux := srv.routes()
 
 	log.Printf("listening on %s", address)
 
