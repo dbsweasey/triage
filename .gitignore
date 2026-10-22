@@ -1,0 +1,19 @@
+# Go build output
+/triage
+/triage.exe
+*.exe
+
+# Local data and secrets
+*.db
+*.db-journal
+.env
+
+# Frontend
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
