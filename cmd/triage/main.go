@@ -22,6 +22,7 @@ type ticketStore interface {
 }
 
 var _ ticketStore = (*store.MemoryStore)(nil)
+var _ ticketStore = (*store.SQLiteStore)(nil)
 
 type healthResponse struct {
 	Status string    `json:"status"`
@@ -127,7 +128,14 @@ func main() {
 
 	log.Printf("openai key set: %t", cfg.OpenAIAPIKey != "")
 
-	srv := &server{tickets: store.NewMemoryStore()}
+	st, err := store.OpenSQLite(context.Background(), cfg.DBPath)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+
+	defer st.Close()
+
+	srv := &server{tickets: st}
 	mux := srv.routes()
 
 	log.Printf("listening on %s", address)

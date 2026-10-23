@@ -5,7 +5,7 @@
 
 # Local data and secrets
 *.db
-*.db-journal
+*.db-*
 .env
 
 # Frontend
