@@ -15,5 +15,12 @@ type Ticket struct {
 	CreatedAt      time.Time `json:"createdAt"`
 }
 
+type Article struct {
+	ID    int64    `json:"id"`
+	Title string   `json:"title"`
+	Body  string   `json:"body"`
+	Tags  []string `json:"tags"`
+}
+
 // ErrNotFound acts as a sentinel error for missing ticket
-var ErrNotFound = errors.New("ticket not found")
+var ErrNotFound = errors.New("not found")

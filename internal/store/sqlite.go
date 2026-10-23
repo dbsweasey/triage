@@ -50,7 +50,10 @@ func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
 		return nil, fmt.Errorf("db exec context: %w", err)
 	}
 
-	return &SQLiteStore{db: db}, nil
+	s := SQLiteStore{db: db}
+	seedArticles(ctx, &s)
+
+	return &s, nil
 }
 
 // Close the db in SQLiteStore
