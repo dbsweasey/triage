@@ -10,7 +10,10 @@ func TestCreate(t *testing.T) {
 	s := NewMemoryStore()
 
 	for want := int64(1); want <= 3; want++ {
-		got := s.Create(Ticket{Title: "x"})
+		got, err := s.Create(t.Context(), Ticket{Title: "x"})
+		if err != nil {
+			t.Fatalf("err = %q, want nil", err)
+		}
 		if got.ID != want {
 			t.Errorf("ID = %d, want %d", got.ID, want)
 		}
@@ -23,9 +26,9 @@ func TestCreate(t *testing.T) {
 func TestGet(t *testing.T) {
 	s := NewMemoryStore()
 
-	s.Create(Ticket{Title: "test"})
+	s.Create(t.Context(), Ticket{Title: "test"})
 
-	ticket, err := s.Get(1)
+	ticket, err := s.Get(t.Context(), 1)
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
@@ -33,7 +36,7 @@ func TestGet(t *testing.T) {
 		t.Errorf("ID = %d, want 1", ticket.ID)
 	}
 
-	_, err = s.Get(2)
+	_, err = s.Get(t.Context(), 2)
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want %v", err, ErrNotFound)
 	}
@@ -42,7 +45,10 @@ func TestGet(t *testing.T) {
 func TestList(t *testing.T) {
 	s := NewMemoryStore()
 
-	got := s.List()
+	got, err := s.List(t.Context())
+	if err != nil {
+		t.Fatalf("err = %q, want nil", err)
+	}
 	if got == nil {
 		t.Fatalf("list = nil, want []")
 	}
@@ -50,11 +56,14 @@ func TestList(t *testing.T) {
 		t.Errorf("length = %d, want 0", len(got))
 	}
 
-	s.Create(Ticket{Title: "y"})
-	s.Create(Ticket{Title: "x"})
-	s.Create(Ticket{Title: "w"})
+	s.Create(t.Context(), Ticket{Title: "y"})
+	s.Create(t.Context(), Ticket{Title: "x"})
+	s.Create(t.Context(), Ticket{Title: "w"})
 
-	got = s.List()
+	got, err = s.List(t.Context())
+	if err != nil {
+		t.Fatalf("err = %q, want nil", err)
+	}
 	if len(got) != 3 {
 		t.Fatalf("len = %d, want 3", len(got))
 	}
@@ -68,11 +77,15 @@ func TestConcurrency(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 100 {
-		wg.Go(func() { s.Create(Ticket{Title: "x"}) })
+		wg.Go(func() { s.Create(t.Context(), Ticket{Title: "x"}) })
 	}
 	wg.Wait()
 
-	if got := len(s.List()); got != 100 {
-		t.Errorf("len = %d, want 100", got)
+	got, err := s.List(t.Context())
+	if err != nil {
+		t.Fatalf("err = %q, want nil", err)
+	}
+	if len(got) != 100 {
+		t.Errorf("len = %d, want 100", len(got))
 	}
 }

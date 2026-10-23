@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,13 +14,22 @@ import (
 	"triage/internal/store"
 )
 
+// ticketStore interface defines signatures for interacting with the ticketStore
+type ticketStore interface {
+	Create(ctx context.Context, t store.Ticket) (store.Ticket, error)
+	Get(ctx context.Context, id int64) (store.Ticket, error)
+	List(ctx context.Context) ([]store.Ticket, error)
+}
+
+var _ ticketStore = (*store.MemoryStore)(nil)
+
 type healthResponse struct {
 	Status string    `json:"status"`
 	Time   time.Time `json:"time"`
 }
 
 type server struct {
-	tickets *store.MemoryStore
+	tickets ticketStore
 }
 
 type createTicketRequest struct {
@@ -39,7 +49,13 @@ func (s *server) handleCreateTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t := store.Ticket{Title: input.Title, Description: input.Description, RequesterEmail: input.RequesterEmail}
-	t = s.tickets.Create(t)
+	t, err := s.tickets.Create(r.Context(), t)
+
+	if err != nil {
+		log.Printf("create ticket: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
 
 	writeJSON(w, http.StatusCreated, t)
 }
@@ -51,12 +67,13 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid id. id must be an integer")
 		return
 	}
-	t, err := s.tickets.Get(id)
+	t, err := s.tickets.Get(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "ticket with id "+idStr+" not found.")
 		return
 	}
 	if err != nil {
+		log.Printf("get ticket: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
@@ -64,7 +81,13 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleGetTickets(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.tickets.List())
+	list, err := s.tickets.List(r.Context())
+	if err != nil {
+		log.Printf("list tickets: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
