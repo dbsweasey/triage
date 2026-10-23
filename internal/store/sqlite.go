@@ -19,10 +19,12 @@ type SQLiteStore struct {
 //go:embed schema.sql
 var schema string
 
+// scanner defines an interface for types that implement Scan
 type scanner interface {
 	Scan(dest ...any) error
 }
 
+// scanTicket runs Scan on types that impliment scanner. Pulls SQL data into a Ticket
 func scanTicket(s scanner) (Ticket, error) {
 	var t Ticket
 	err := s.Scan(&t.ID, &t.Title, &t.Description, &t.RequesterEmail, &t.Status, &t.CreatedAt)
@@ -36,6 +38,7 @@ func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db open: %w", err)
 	}
+	db.SetMaxOpenConns(1)
 
 	if err = db.PingContext(ctx); err != nil {
 		db.Close()
@@ -61,7 +64,7 @@ func (s *SQLiteStore) Create(ctx context.Context, t Ticket) (Ticket, error) {
 	t.Status = "open"
 
 	q := `
-		INSERT INTO tickets (title, description, requester_email, status, created_at) 
+		INSERT INTO tickets (title, description, requester_email, status, created_at)
 		VALUES (?, ?, ?, ?, ?)`
 
 	res, err := s.db.ExecContext(ctx, q, t.Title, t.Description, t.RequesterEmail, t.Status, t.CreatedAt)
@@ -80,11 +83,9 @@ func (s *SQLiteStore) Create(ctx context.Context, t Ticket) (Ticket, error) {
 
 // Get returns the ticket with the ID, error otherwise
 func (s *SQLiteStore) Get(ctx context.Context, id int64) (Ticket, error) {
-	var t Ticket
-
 	q := `
-		SELECT id, title, description, requester_email, status, created_at 
-		FROM tickets 
+		SELECT id, title, description, requester_email, status, created_at
+		FROM tickets
 		WHERE id = ?`
 
 	row := s.db.QueryRowContext(ctx, q, id)
@@ -103,8 +104,8 @@ func (s *SQLiteStore) Get(ctx context.Context, id int64) (Ticket, error) {
 func (s *SQLiteStore) List(ctx context.Context) ([]Ticket, error) {
 	list := []Ticket{}
 	q := `
-		SELECT id, title, description, requester_email, status, created_at 
-		FROM tickets 
+		SELECT id, title, description, requester_email, status, created_at
+		FROM tickets
 		ORDER BY id DESC`
 
 	rows, err := s.db.QueryContext(ctx, q)

@@ -21,8 +21,10 @@ type ticketStore interface {
 	List(ctx context.Context) ([]store.Ticket, error)
 }
 
-var _ ticketStore = (*store.MemoryStore)(nil)
-var _ ticketStore = (*store.SQLiteStore)(nil)
+var (
+	_ ticketStore = (*store.MemoryStore)(nil)
+	_ ticketStore = (*store.SQLiteStore)(nil)
+)
 
 type healthResponse struct {
 	Status string    `json:"status"`
