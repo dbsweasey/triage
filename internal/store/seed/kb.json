@@ -1,0 +1,82 @@
+[
+  {
+    "title": "Reset your account password",
+    "body": "If you forgot your password or it has expired, go to the self-service portal and choose \"Forgot password\". Verify your identity with your registered phone or authenticator app, then choose a new password of at least 14 characters. New passwords can't match your last 10. If self-service fails, contact the help desk to verify your identity by phone.",
+    "tags": ["account", "password", "login", "self-service"]
+  },
+  {
+    "title": "Unlock a locked-out account",
+    "body": "Accounts lock for 15 minutes after 5 failed sign-in attempts. Wait 15 minutes and try again, or unlock immediately from the self-service portal. Repeated lockouts usually mean an old password is saved somewhere: check your phone's mail app, mapped drives, and saved Wi-Fi credentials and update them.",
+    "tags": ["account", "lockout", "login", "password"]
+  },
+  {
+    "title": "Set up multi-factor authentication (MFA)",
+    "body": "Install the company-approved authenticator app on your phone. Sign in to the security portal, choose \"Add sign-in method\", and scan the QR code. Approve the test notification to finish. If you get a new phone, register it before wiping the old one, or ask the help desk to reset your MFA methods.",
+    "tags": ["account", "mfa", "2fa", "security", "authenticator"]
+  },
+  {
+    "title": "VPN keeps disconnecting",
+    "body": "Frequent VPN drops are usually caused by unstable Wi-Fi, power-saving settings, or an outdated VPN client. Update the VPN client to the latest version, switch to a wired connection or move closer to the router, and disable \"Allow the computer to turn off this device to save power\" on your network adapter. If drops happen exactly every few minutes, report the interval to the help desk; it may be a session timeout on the gateway.",
+    "tags": ["network", "vpn", "remote", "disconnect", "wifi"]
+  },
+  {
+    "title": "Connect to the VPN for the first time",
+    "body": "Download the VPN client from the software center, install it, and enter the gateway address vpn.example.com. Sign in with your work email and approve the MFA prompt. Once connected you can reach internal sites and file shares. You only need the VPN when working outside the office.",
+    "tags": ["network", "vpn", "remote", "setup"]
+  },
+  {
+    "title": "Wi-Fi is slow or keeps dropping in the office",
+    "body": "Forget the corporate Wi-Fi network and reconnect with your work credentials. Make sure you're on the 5 GHz corporate network, not the guest network. Restart your laptop to renew the network address. If several people nearby have the same problem, report the location (floor and room) so networking can check the access point.",
+    "tags": ["network", "wifi", "wireless", "slow", "office"]
+  },
+  {
+    "title": "Printer shows offline or won't print",
+    "body": "Check the printer has power, paper, and no error on its display. On your computer, open Printers & scanners, remove the printer, and add it again from the print server. Clear any stuck jobs in the print queue. If the printer shows offline for everyone, report the printer's asset tag and location.",
+    "tags": ["hardware", "printer", "printing", "offline"]
+  },
+  {
+    "title": "Laptop won't turn on or charge",
+    "body": "Plug in the charger and confirm the charging light comes on; try a different outlet and charger if you have one. Hold the power button for 15 seconds to force a reset, then press it once. If the battery is swollen, hot, or smells unusual, stop using it immediately and contact the help desk for a replacement.",
+    "tags": ["hardware", "laptop", "battery", "power", "charging"]
+  },
+  {
+    "title": "External monitor not detected",
+    "body": "Check both ends of the cable and that the monitor is set to the right input. Try another cable or port. On Windows press Win+P and choose Extend; on macOS open Displays settings and click Detect Displays. Docking stations sometimes need a firmware update from the software center.",
+    "tags": ["hardware", "monitor", "display", "dock"]
+  },
+  {
+    "title": "Outlook not receiving or sending email",
+    "body": "Check you're online and that Outlook isn't in Work Offline mode (Send/Receive tab). Look in the Outbox for stuck messages and remove any with large attachments. Restart Outlook. If your mailbox is full, archive or delete old items; mailboxes stop sending at 50 GB. Test webmail in a browser: if webmail works, the problem is the Outlook profile, and the help desk can rebuild it.",
+    "tags": ["email", "outlook", "mailbox", "sync"]
+  },
+  {
+    "title": "Set up email on your phone",
+    "body": "Install the approved mail app from your phone's app store and sign in with your work email. Approve the MFA prompt and accept the device management policy when asked. Built-in mail apps are not supported. If you see \"device not compliant\", update your phone's operating system and set a screen lock.",
+    "tags": ["email", "mobile", "phone", "setup"]
+  },
+  {
+    "title": "Report a phishing email",
+    "body": "Don't click links, open attachments, or reply. Use the \"Report phishing\" button in Outlook, which sends it to the security team and removes it from your inbox. If you already clicked a link or entered your password, change your password right away and contact the help desk; this is treated as urgent.",
+    "tags": ["security", "phishing", "email", "suspicious"]
+  },
+  {
+    "title": "Suspected malware or virus on your computer",
+    "body": "Disconnect from the network (unplug the cable and turn off Wi-Fi) but leave the computer on. Don't try to clean it yourself. Contact the help desk immediately and describe what you saw, such as pop-ups, ransom notes, or files with strange extensions. Security will isolate and examine the device.",
+    "tags": ["security", "malware", "virus", "ransomware"]
+  },
+  {
+    "title": "Request new software",
+    "body": "Check the software center first; most approved applications install from there without admin rights. For software that isn't listed, submit a software request with the product name, version, and business reason. Requests need manager approval and a security review, which usually takes 3 to 5 business days.",
+    "tags": ["software", "install", "request", "license"]
+  },
+  {
+    "title": "Application crashes or freezes",
+    "body": "Save your work, then close the application completely (use Task Manager if needed) and reopen it. Install pending updates for the application and the operating system, then restart. If it still crashes, note the exact error message and what you were doing, and include both in your ticket.",
+    "tags": ["software", "crash", "freeze", "error", "update"]
+  },
+  {
+    "title": "Access a shared drive or folder",
+    "body": "Shared folders are granted through access groups owned by each team. Ask the folder owner or your manager to approve access, then submit an access request naming the folder path. After approval, sign out and back in so the new permissions apply. Connect to the folder from File Explorer using its \\\\fileserver path.",
+    "tags": ["account", "access", "permissions", "file share", "network drive"]
+  }
+]
