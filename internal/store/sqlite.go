@@ -51,7 +51,10 @@ func OpenSQLite(ctx context.Context, path string) (*SQLiteStore, error) {
 	}
 
 	s := SQLiteStore{db: db}
-	seedArticles(ctx, &s)
+	err = seedArticles(ctx, &s)
+	if err != nil {
+		return nil, fmt.Errorf("seed: %w", err)
+	}
 
 	return &s, nil
 }
