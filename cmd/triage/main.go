@@ -21,9 +21,16 @@ type ticketStore interface {
 	List(ctx context.Context) ([]store.Ticket, error)
 }
 
+type kbStore interface {
+	GetArticle(ctx context.Context, id int64) (store.Article, error)
+	ListArticles(ctx context.Context) ([]store.Article, error)
+	SearchArticles(ctx context.Context, text string, limit int) ([]store.Article, error)
+}
+
 var (
 	_ ticketStore = (*store.MemoryStore)(nil)
 	_ ticketStore = (*store.SQLiteStore)(nil)
+	_ kbStore     = (*store.SQLiteStore)(nil)
 )
 
 type healthResponse struct {
@@ -32,7 +39,8 @@ type healthResponse struct {
 }
 
 type server struct {
-	tickets ticketStore
+	tickets  ticketStore
+	articles kbStore
 }
 
 type createTicketRequest struct {
@@ -64,15 +72,14 @@ func (s *server) handleCreateTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
-	id, err := strconv.ParseInt(idStr, 10, 64)
+	id, err := parseID(r)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid id. id must be an integer")
 		return
 	}
 	t, err := s.tickets.Get(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "ticket with id "+idStr+" not found.")
+		writeError(w, http.StatusNotFound, "ticket with id "+strconv.FormatInt(id, 10)+" not found.")
 		return
 	}
 	if err != nil {
@@ -83,7 +90,7 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, t)
 }
 
-func (s *server) handleGetTickets(w http.ResponseWriter, r *http.Request) {
+func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 	list, err := s.tickets.List(r.Context())
 	if err != nil {
 		log.Printf("list tickets: %v", err)
@@ -91,6 +98,25 @@ func (s *server) handleGetTickets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (s *server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id. id must be an integer")
+		return
+	}
+	a, err := s.articles.GetArticle(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "article with id "+strconv.FormatInt(id, 10)+" not found.")
+		return
+	}
+	if err != nil {
+		log.Printf("get article: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, a)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +135,12 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+func parseID(r *http.Request) (int64, error) {
+	idStr := r.PathValue("id")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	return id, err
+}
+
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
 
@@ -116,7 +148,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/health", handleHealth)
 	mux.HandleFunc("POST /api/tickets", s.handleCreateTicket)
 	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
-	mux.HandleFunc("GET /api/tickets", s.handleGetTickets)
+	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
+
+	mux.HandleFunc("GET /api/kb/{id}", s.handleGetArticle)
 
 	return mux
 }
@@ -137,7 +171,7 @@ func main() {
 
 	defer st.Close()
 
-	srv := &server{tickets: st}
+	srv := &server{tickets: st, articles: st}
 	mux := srv.routes()
 
 	log.Printf("listening on %s", address)
