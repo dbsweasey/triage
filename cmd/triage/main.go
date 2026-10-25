@@ -119,6 +119,39 @@ func (s *server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, a)
 }
 
+func (s *server) handleListArticles(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query().Get("q")
+	// If no query, list articles
+	if q == "" {
+		list, err := s.articles.ListArticles(r.Context())
+		if err != nil {
+			log.Printf("list articles: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeJSON(w, http.StatusOK, list)
+		// Otherwise, run query
+	} else {
+		limitStr := r.URL.Query().Get("limit")
+		var limit int
+		if limitStr == "" {
+			limit = 0
+		} else {
+			var err error
+			limit, err = strconv.Atoi(limitStr)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, "invalid limit")
+				return
+			}
+		}
+		list, err := s.articles.SearchArticles(r.Context(), q, limit)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		writeJSON(w, http.StatusOK, list)
+	}
+}
+
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "OK", Time: time.Now()})
 }
@@ -151,6 +184,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
 
 	mux.HandleFunc("GET /api/kb/{id}", s.handleGetArticle)
+	mux.HandleFunc("GET /api/kb", s.handleListArticles)
 
 	return mux
 }
