@@ -5,6 +5,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,7 +57,7 @@ type Result struct {
 	Category   string   `json:"category"`
 	Summary    string   `json:"summary"`
 	Steps      []string `json:"steps"`
-	ArticleIDs []int64  `json:"articleids"`
+	ArticleIDs []int64  `json:"articleIds"`
 }
 
 type OpenAIClient struct {
@@ -131,32 +132,32 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return Result{}, fmt.Errorf("do request: %w", err)
+		return Result{}, fmt.Errorf("%w: do request: %w", ErrUpstream, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		errMsg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return Result{}, fmt.Errorf("response: %d - %s", resp.StatusCode, errMsg)
+		return Result{}, fmt.Errorf("%w: response: %d - %s", ErrUpstream, resp.StatusCode, errMsg)
 	}
 
 	var response responseBody
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return Result{}, fmt.Errorf("decode: %v", err)
+		return Result{}, fmt.Errorf("%w: decode: %v", ErrBadResponse, err)
 	}
 	var result Result
 	if response.Status != "completed" {
-		return Result{}, fmt.Errorf("status not completed")
+		return Result{}, fmt.Errorf("%w: status %q", ErrIncomplete, response.Status)
 	}
 	for _, o := range response.Output {
 		if o.Type == "message" {
 			for _, content := range o.Content {
 				if content.Refusal != "" {
-					return Result{}, fmt.Errorf("refusal: %v", o.Content[0].Refusal)
+					return Result{}, fmt.Errorf("%w: %s", ErrRefused, content.Refusal)
 				}
 				if content.Type == "output_text" {
-					if err := json.Unmarshal([]byte(o.Content[0].Text), &result); err != nil {
-						return Result{}, fmt.Errorf("unmarshal: %w", err)
+					if err := json.Unmarshal([]byte(content.Text), &result); err != nil {
+						return Result{}, fmt.Errorf("%w: unmarshal: %w", ErrBadResponse, err)
 					}
 					return result, nil
 				}
@@ -165,5 +166,12 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 		}
 	}
 
-	return Result{}, fmt.Errorf("no result found")
+	return Result{}, fmt.Errorf("%w: no result found", ErrBadResponse)
 }
+
+var (
+	ErrRefused     = errors.New("model refused")
+	ErrIncomplete  = errors.New("incomplete response")
+	ErrBadResponse = errors.New("bad response")
+	ErrUpstream    = errors.New("upstream error")
+)
