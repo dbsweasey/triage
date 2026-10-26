@@ -15,6 +15,7 @@ import (
 type fakeKB struct {
 	articles  []store.Article
 	lastQuery string
+	lastLimit int
 }
 
 func initFakeKB() *fakeKB {
@@ -39,6 +40,7 @@ func (s *fakeKB) ListArticles(context.Context) ([]store.Article, error) {
 
 func (s *fakeKB) SearchArticles(ctx context.Context, text string, limit int) ([]store.Article, error) {
 	s.lastQuery = text
+	s.lastLimit = limit
 	return s.articles, nil
 }
 
@@ -205,7 +207,7 @@ func TestGetArticle(t *testing.T) {
 				t.Errorf("title = %q, want %q", got.Title, tc.wantTitle)
 			}
 			if got.ID != tc.wantID {
-				t.Errorf("title = %d, want %d", got.ID, tc.wantID)
+				t.Errorf("id = %d, want %d", got.ID, tc.wantID)
 			}
 		})
 	}
@@ -215,13 +217,14 @@ func TestListArticles(t *testing.T) {
 	tests := []struct {
 		name       string
 		path       string
-		wantLen    int
+		wantLimit  int
 		wantStatus int
 		wantQuery  string
 	}{
-		{"list", "/api/kb", 1, http.StatusOK, ""},
-		{"search", "/api/kb?q=vpn", 1, http.StatusOK, "vpn"},
+		{"search no limit", "/api/kb?q=vpn", 0, http.StatusOK, "vpn"},
 		{"search limit", "/api/kb?q=vpn&limit=1", 1, http.StatusOK, "vpn"},
+		{"invalid limit", "/api/kb?q=vpn&limit=abc", 0, http.StatusBadRequest, "vpn"},
+		{"list", "/api/kb", 0, http.StatusOK, ""},
 	}
 
 	kb := initFakeKB()
@@ -229,21 +232,30 @@ func TestListArticles(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Reset fake KB
+			kb.lastLimit = 0
+			kb.lastQuery = ""
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
 			if rec.Code != tc.wantStatus {
 				t.Fatalf("code = %d, want %d", rec.Code, tc.wantStatus)
 			}
+			if tc.wantStatus >= 400 {
+				return
+			}
 			var got []store.Article
 			if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 				t.Fatalf("decode: %v", err)
 			}
-			if len(got) != tc.wantLen {
-				t.Fatalf("len = %d, want %d", len(got), tc.wantLen)
+			if len(got) == 0 {
+				t.Fatalf("len = 0, want > 1")
 			}
 			if kb.lastQuery != tc.wantQuery {
 				t.Errorf("query = %q, want %q", kb.lastQuery, tc.wantQuery)
+			}
+			if kb.lastLimit != tc.wantLimit {
+				t.Errorf("limit = %d, want %d", kb.lastLimit, tc.wantLimit)
 			}
 			if got[0].ID != 1 {
 				t.Errorf("ID = %d, want 1", got[0].ID)
@@ -310,6 +322,8 @@ func Test500Errors(t *testing.T) {
 		{"get ticket", http.MethodGet, "/api/tickets/1", ""},
 		{"list tickets", http.MethodGet, "/api/tickets", ""},
 		{"get article", http.MethodGet, "/api/kb/1", ""},
+		{"list articles", http.MethodGet, "/api/kb", ""},
+		{"search articles", http.MethodGet, "/api/kb?q=vpn", ""},
 	}
 
 	mux := newTestServer(failingStore{}, failingStore{})
