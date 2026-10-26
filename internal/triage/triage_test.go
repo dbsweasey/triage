@@ -5,20 +5,55 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"triage/internal/store"
 )
 
 func TestBuildPrompt(t *testing.T) {
+	ticket := store.Ticket{Title: "New ticket", Description: "This ticket is new"}
 	sys, user := buildPrompt(
-		store.Ticket{Title: "New ticket", Description: "This ticket is new"},
+		ticket,
 		[]store.Article{
-			{Title: "Test article", Body: "This article is a test", Tags: []string{"test", "article"}},
-			{Title: "Another article", Body: "Another test article", Tags: []string{"another", "article"}},
+			{ID: 1, Title: "Test article", Body: "This article is a test", Tags: []string{"test", "article"}},
+			{ID: 2, Title: "Another article", Body: "Another test article", Tags: []string{"another", "article"}},
 		})
-	t.Log(sys)
-	t.Log(user)
+	if !strings.Contains(sys, "# Role") {
+		t.Errorf("contains '# Role' = false, want true")
+	}
+	if !strings.Contains(sys, "# Input") {
+		t.Errorf("contains '# Input' = false, want true")
+	}
+	if !strings.Contains(sys, "# Goal") {
+		t.Errorf("contains '# Goal' = false, want true")
+	}
+	want :=
+		`Help me resolve the following ticket.
+Title: New ticket
+Description: This ticket is new
+
+Here are the relevant knowledge articles:
+
+Article #1 - Test article
+	This article is a test
+	Tags: [test article]
+
+Article #2 - Another article
+	Another test article
+	Tags: [another article]
+`
+	if user != want {
+		t.Errorf("user = \n%v\nwant\n%v\nDONE.", user, want)
+	}
+
+	_, user = buildPrompt(ticket, []store.Article{})
+	want = `Help me resolve the following ticket.
+Title: New ticket
+Description: This ticket is new`
+	if user != want {
+		t.Errorf("user = \n%v\nwant\n%v\nDONE.", user, want)
+	}
 }
 
 func TestGetResultHappy(t *testing.T) {

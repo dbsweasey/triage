@@ -89,21 +89,21 @@ Develop an output that will allow the ticket to be routed to the correct
 department for resolution with a strong resolution summary, clear steps,
 an accurate priority.
 	`
-
-	// Create string of articles for user prompt
-	var builder strings.Builder
-	for _, a := range as {
-		fmt.Fprintf(&builder, "\nArticle #%d: - %v\n\t%v\n\tTags: %v\n", a.ID, a.Title, a.Body, a.Tags)
-	}
-
-	userPrompt := fmt.Sprintf(`
-Help me resolve the following ticket.
+	userPrompt := fmt.Sprintf(
+		`Help me resolve the following ticket.
 Title: %v
-Description: %v
+Description: %v`, t.Title, t.Description)
+	if len(as) > 0 {
+		// Create string of articles for user prompt
+		var builder strings.Builder
+		for _, a := range as {
+			fmt.Fprintf(&builder, "\nArticle #%d - %v\n\t%v\n\tTags: %v\n", a.ID, a.Title, a.Body, a.Tags)
+		}
+		userPrompt += fmt.Sprintf(`
 
 Here are the relevant knowledge articles:
-%v
-	`, t.Title, t.Description, builder.String())
+%v`, builder.String())
+	}
 
 	return systemPrompt, userPrompt
 }
@@ -167,6 +167,13 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 	}
 
 	return Result{}, fmt.Errorf("%w: no result found", ErrBadResponse)
+}
+
+func ValidateResult(r Result) bool {
+	// TOOD: implement
+	// check if priority and category match enum
+	// ensure no field is empty, steps must have at least 1 in the least, etc.
+	return false
 }
 
 var (
