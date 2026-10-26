@@ -39,8 +39,9 @@ func (s *server) handleListArticles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, list)
-		// Otherwise, run query
+		return
 	}
+	// Otherwise, run query
 	limitStr := r.URL.Query().Get("limit")
 	var limit int
 	if limitStr != "" {
