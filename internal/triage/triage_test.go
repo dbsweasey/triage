@@ -137,6 +137,56 @@ func TestGetResultBad(t *testing.T) {
 	}
 }
 
+func TestValidateResponse(t *testing.T) {
+	tests := []struct {
+		name       string
+		result     Result
+		errWant    error
+		errContain string
+	}{
+		{"invalid priority", buildResponse("priority"), ErrBadResponse, "invalid priority"},
+		{"good response", buildResponse("good"), nil, ""},
+		{"invalid steps", buildResponse("steps"), ErrBadResponse, "no steps"},
+		{"invalid category", buildResponse("category"), ErrBadResponse, "invalid category"},
+		{"invalid articles", buildResponse("articles"), ErrBadResponse, "invalid article"},
+	}
+	articles := []store.Article{{ID: 1, Title: "Test", Body: "test", Tags: []string{}}, {ID: 2, Title: "Test", Body: "test", Tags: []string{}}}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ValidateResult(tc.result, articles)
+			if tc.errWant == nil {
+				if got != nil {
+					t.Fatalf("err = %v, want nil", got)
+				}
+				return
+			}
+			if !errors.Is(got, tc.errWant) {
+				t.Errorf("err = %v, want %v", got, tc.errWant)
+			}
+			if !strings.Contains(got.Error(), tc.errContain) {
+				t.Errorf("err = %v, want contains %v", got, tc.errContain)
+			}
+		})
+	}
+}
+
+func buildResponse(issue string) Result {
+	r := Result{Priority: "high", Category: "network", Summary: "test", Steps: []string{"1. test", "2. test"}, ArticleIDs: []int64{1, 2}}
+	if issue == "priority" {
+		r.Priority = "womp"
+	}
+	if issue == "category" {
+		r.Category = "womp"
+	}
+	if issue == "steps" {
+		r.Steps = []string{}
+	}
+	if issue == "articles" {
+		r.ArticleIDs = []int64{1, 67, 69}
+	}
+	return r
+}
+
 func messageResponse(status string, part string) string {
 	return `{"status":"` + status + `","output":[{"type":"message","content":[` + part + `]}]}`
 }

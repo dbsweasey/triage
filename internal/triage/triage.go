@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -169,11 +170,24 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 	return Result{}, fmt.Errorf("%w: no result found", ErrBadResponse)
 }
 
-func ValidateResult(r Result) bool {
-	// TOOD: implement
-	// check if priority and category match enum
-	// ensure no field is empty, steps must have at least 1 in the least, etc.
-	return false
+func ValidateResult(r Result, as []store.Article) error {
+	if !slices.Contains([]string{"low", "medium", "high"}, strings.ToLower(r.Priority)) {
+		return fmt.Errorf("%w: invalid priority %v", ErrBadResponse, r.Priority)
+	}
+	if !slices.Contains([]string{"hardware", "software", "security", "ai", "network", "other"}, strings.ToLower(r.Category)) {
+		return fmt.Errorf("%w: invalid category %v", ErrBadResponse, r.Category)
+	}
+	if len(r.Steps) == 0 {
+		return fmt.Errorf("%w: no steps", ErrBadResponse)
+	}
+	for _, id := range r.ArticleIDs {
+		if !slices.ContainsFunc(as, func(a store.Article) bool {
+			return id == a.ID
+		}) {
+			return fmt.Errorf("%w: invalid article inclusion", ErrBadResponse)
+		}
+	}
+	return nil
 }
 
 var (

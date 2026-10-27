@@ -4,5 +4,7 @@ A simple LLM-based triage system built in Go with a TS + React frontend
 
 ### TODO
 
-- LLM output validation
+- build SQL schema for triage
+- Get and Save triage methods
+- build handler
 - wire to main!
