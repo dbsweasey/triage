@@ -22,5 +22,16 @@ type Article struct {
 	Tags  []string `json:"tags"`
 }
 
-// ErrNotFound acts as a sentinel error for missing ticket
+type Triage struct {
+	ID         int64     `json:"id"`
+	TicketID   int64     `json:"ticketId"`
+	Priority   string    `json:"priority"`
+	Category   string    `json:"category"`
+	Summary    string    `json:"summary"`
+	Steps      []string  `json:"steps"`
+	ArticleIDs []int64   `json:"articleIds"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// ErrNotFound acts as a sentinel error for missing item
 var ErrNotFound = errors.New("not found")
