@@ -63,10 +63,6 @@ type createTicketRequest struct {
 	RequesterEmail string `json:"requesterEmail"`
 }
 
-type createTriageRequest struct {
-	TicketId int64 `json:"ticketId"`
-}
-
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "OK", Time: time.Now()})
 }
@@ -103,6 +99,26 @@ func (s *server) handleCreateTriage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, tr)
+}
+
+func (s *server) handleGetLatestTriage(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id. id must be an integer")
+		return
+	}
+	ticket, err := s.tickets.Get(r.Context(), id)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+	tr, err := s.triages.GetLatestTriage(r.Context(), ticket.ID)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, tr)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -154,6 +170,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/kb", s.handleListArticles)
 
 	mux.HandleFunc("POST /api/tickets/{id}/triage", s.handleCreateTriage)
+	mux.HandleFunc("GET /api/tickets/{id}/triage", s.handleGetLatestTriage)
 
 	return mux
 }
@@ -174,7 +191,12 @@ func main() {
 
 	defer st.Close()
 
-	tri := triage.NewOpenAIClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	var tri triager = &triage.Fake{}
+	if cfg.OpenAIAPIKey != "" {
+		tri = triage.NewOpenAIClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	} else {
+		log.Println("OPENAI_API_KEY not set: using fake triager")
+	}
 
 	srv := &server{tickets: st, articles: st, triages: st, triager: tri}
 	mux := srv.routes()

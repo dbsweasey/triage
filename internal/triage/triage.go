@@ -111,9 +111,10 @@ a summary of the issue, and specific resolution steps.
 You will receive a ticket, which contains a title and description. This
 is how you determine the issue to be resolved and its priority. Priority 
 must be decided based on how many users are affected, known workarounds, and
-business criticallity.
+business criticality.
 You will also receive a list of articles. These have already been retrieved.
-Use these as reference to create resolution steps and summary.
+Use these as reference to create resolution steps and summary. Only use IDs from
+articles provideed. If none apply, return an empty list.
 
 # Goal
 Develop an output that will allow the ticket to be routed to the correct
@@ -218,6 +219,28 @@ func ValidateResult(r Result, as []store.Article) error {
 		}
 	}
 	return nil
+}
+
+type Fake struct{}
+
+func (s *Fake) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (Result, error) {
+	var articleIds []int64
+	for i, a := range as {
+		if i == 1 {
+			break
+		}
+		articleIds = append(articleIds, a.ID)
+	}
+	priority := "low"
+	category := "software"
+	if strings.Contains(t.Description, "network") {
+		priority = "high"
+		category = "network"
+	} else if strings.Contains(t.Description, "hardware") {
+		priority = "medium"
+		category = "hardware"
+	}
+	return Result{Priority: priority, Category: category, Summary: "An issue with user " + category, ArticleIDs: articleIds, Steps: []string{"Restart your computer", "Try again", "Talk to IT if still not working"}}, nil
 }
 
 var (

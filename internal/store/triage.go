@@ -39,7 +39,7 @@ func (s *SQLiteStore) CreateTriage(ctx context.Context, t Triage) (Triage, error
 	return t, nil
 }
 
-// GetTriage retrieves a triage based on the ticket ID
+// GetLatestTriage retrieves a triage based on the ticket ID
 func (s *SQLiteStore) GetLatestTriage(ctx context.Context, ticketID int64) (Triage, error) {
 	q := `
 		SELECT id, priority, category, summary, steps, article_ids, created_at

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -50,7 +51,10 @@ type fakeTriages struct {
 }
 
 func (s *fakeTriages) GetLatestTriage(ctx context.Context, ticketID int64) (store.Triage, error) {
-	return s.triages[0], nil
+	if s.triages[0].TicketID == ticketID {
+		return s.triages[0], nil
+	}
+	return store.Triage{}, store.ErrNotFound
 }
 
 func (s *fakeTriages) CreateTriage(ctx context.Context, t store.Triage) (store.Triage, error) {
@@ -62,7 +66,10 @@ func (s *fakeTriages) CreateTriage(ctx context.Context, t store.Triage) (store.T
 type fakeTriager struct{}
 
 func (s *fakeTriager) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (triage.Result, error) {
-	return triage.Result{Priority: "med", Category: "network", Summary: "internet went out", Steps: []string{"Restart", "Reconnect"}, ArticleIDs: []int64{1, 4}}, nil
+	if t.Title == "refuse" {
+		return triage.Result{}, triage.ErrRefused
+	}
+	return triage.Result{Priority: "medium", Category: "network", Summary: "internet went out", Steps: []string{"Restart", "Reconnect"}, ArticleIDs: []int64{}}, nil
 }
 
 func newTestServer(ts ticketStore, ks kbStore, trs triageStore, tri triager) http.Handler {
@@ -109,7 +116,7 @@ func TestGetTicket(t *testing.T) {
 	}
 
 	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
-	createTicket(t, mux, "test")
+	createTicket(t, mux, "test") // ID 1
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -286,15 +293,20 @@ func TestListArticles(t *testing.T) {
 }
 
 func TestCreateTriage(t *testing.T) {
-	// Build
 	tests := []struct {
 		name       string
 		path       string
 		wantStatus int
 	}{
-		{"invalid something", "/api/ticket/1/triage", http.StatusOK},
+		{"no ticket", "/api/tickets/3/triage", http.StatusNotFound},
+		{"invalid id", "/api/tickets/abc/triage", http.StatusBadRequest},
+		{"valid ticket", "/api/tickets/1/triage", http.StatusCreated},
+		{"refused", "/api/tickets/2/triage", http.StatusUnprocessableEntity},
 	}
 	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
+	createTicket(t, mux, "test")   // ID 1
+	createTicket(t, mux, "refuse") // ID 2
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(""))
@@ -308,7 +320,33 @@ func TestCreateTriage(t *testing.T) {
 }
 
 func TestGetLatestTriage(t *testing.T) {
-	// Build
+	tests := []struct {
+		name         string
+		path         string
+		wantID       int64
+		wantTicketID int64
+		wantStatus   int
+	}{
+		{"valid", "/api/tickets/1/triage", 1, 1, http.StatusOK},
+		{"invalid ticket", "/api/tickets/abc/triage", 0, 0, http.StatusBadRequest},
+		{"no ticket", "/api/tickets/3/triage", 0, 0, http.StatusNotFound},
+		{"no triage", "/api/tickets/2/triage", 0, 2, http.StatusNotFound},
+	}
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
+	createTicket(t, mux, "test")  // ID 1
+	createTicket(t, mux, "test2") // ID 2
+	createTriage(t, mux, 1)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.path, strings.NewReader(""))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+		})
+	}
 }
 
 func TestHealth(t *testing.T) {
@@ -324,6 +362,16 @@ func TestHealth(t *testing.T) {
 func createTicket(t *testing.T, h http.Handler, title string) {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, "/api/tickets", strings.NewReader(`{"title":"`+title+`","description":"d"}`))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("setup: create status = %d, want 201", rec.Code)
+	}
+}
+
+func createTriage(t *testing.T, h http.Handler, ticketID int64) {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/api/tickets/"+strconv.FormatInt(ticketID, 10)+"/triage", strings.NewReader(""))
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
 	if rec.Code != http.StatusCreated {
@@ -379,6 +427,8 @@ func Test500Errors(t *testing.T) {
 		{"get article", http.MethodGet, "/api/kb/1", ""},
 		{"list articles", http.MethodGet, "/api/kb", ""},
 		{"search articles", http.MethodGet, "/api/kb?q=vpn", ""},
+		{"create triage", http.MethodPost, "/api/tickets/1/triage", ""},
+		{"get triage", http.MethodGet, "/api/tickets/1/triage", ""},
 	}
 
 	mux := newTestServer(failingStore{}, failingStore{}, failingStore{}, nil)
