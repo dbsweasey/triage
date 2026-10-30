@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"triage/internal/config"
 	"triage/internal/store"
+	"triage/internal/triage"
 )
 
 // ticketStore interface defines signatures for interacting with the ticketStore
@@ -24,6 +26,11 @@ type kbStore interface {
 	GetArticle(ctx context.Context, id int64) (store.Article, error)
 	ListArticles(ctx context.Context) ([]store.Article, error)
 	SearchArticles(ctx context.Context, text string, limit int) ([]store.Article, error)
+}
+
+type triageStore interface {
+	GetTriage(ctx context.Context, id int64) (store.Triage, error)
+	CreateTriage(ctx context.Context, t store.Triage) (store.Triage, error)
 }
 
 var (
@@ -40,6 +47,8 @@ type healthResponse struct {
 type server struct {
 	tickets  ticketStore
 	articles kbStore
+	triages  triageStore
+	llm      *triage.OpenAIClient
 }
 
 type createTicketRequest struct {
@@ -48,18 +57,50 @@ type createTicketRequest struct {
 	RequesterEmail string `json:"requesterEmail"`
 }
 
-func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
-	list, err := s.tickets.List(r.Context())
-	if err != nil {
-		log.Printf("list tickets: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
-		return
-	}
-	writeJSON(w, http.StatusOK, list)
+type createTriageRequest struct {
+	TicketId int64 `json:"ticketId"`
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "OK", Time: time.Now()})
+}
+
+func (s *server) handleTriage(w http.ResponseWriter, r *http.Request) {
+	var input createTriageRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid ticket id")
+		return
+	}
+	ticket, err := s.tickets.Get(r.Context(), input.TicketId)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "ticket with id "+strconv.FormatInt(input.TicketId, 10)+" not found.")
+		return
+	}
+	if err != nil {
+		log.Printf("get ticket: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	articles, err := s.articles.SearchArticles(r.Context(), ticket.Title+" "+ticket.Description, 5)
+	if err != nil {
+		log.Printf("search articles: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	result, err := s.llm.GetResult(r.Context(), ticket, articles)
+	if err != nil {
+		log.Printf("call llm: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	if err := triage.ValidateResult(result, articles); err != nil {
+		log.Printf("validate result: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	triage, err := s.triages.CreateTriage(r.Context(), store.Triage{TicketID: ticket.ID, Priority: result.Priority, Category: result.Category, Summary: result.Summary, Steps: result.Steps, ArticleIDs: result.ArticleIDs})
+
+	writeJSON(w, http.StatusCreated, triage)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -92,6 +133,8 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/kb/{id}", s.handleGetArticle)
 	mux.HandleFunc("GET /api/kb", s.handleListArticles)
 
+	mux.HandleFunc("POST /api/triage", s.handleTriage)
+
 	return mux
 }
 
@@ -111,7 +154,9 @@ func main() {
 
 	defer st.Close()
 
-	srv := &server{tickets: st, articles: st}
+	llm := triage.NewOpenAIClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
+
+	srv := &server{tickets: st, articles: st, triages: st, llm: llm}
 	mux := srv.routes()
 
 	log.Printf("listening on %s", address)

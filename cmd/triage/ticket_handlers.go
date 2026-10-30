@@ -50,3 +50,13 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, t)
 }
+
+func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
+	list, err := s.tickets.List(r.Context())
+	if err != nil {
+		log.Printf("list tickets: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	writeJSON(w, http.StatusOK, list)
+}
