@@ -40,16 +40,16 @@ func (s *SQLiteStore) CreateTriage(ctx context.Context, t Triage) (Triage, error
 }
 
 // GetTriage retrieves a triage based on the ticket ID
-func (s *SQLiteStore) GetTriage(ctx context.Context, id int64) (Triage, error) {
+func (s *SQLiteStore) GetLatestTriage(ctx context.Context, ticketID int64) (Triage, error) {
 	q := `
 		SELECT id, priority, category, summary, steps, article_ids, created_at
 		FROM triages
 		WHERE ticket_id = ?
-		ORDER BY created_at DESC
+		ORDER BY id DESC
 		LIMIT 1
 	`
 
-	res := s.db.QueryRowContext(ctx, q, id)
+	res := s.db.QueryRowContext(ctx, q, ticketID)
 	var t Triage
 	var steps []byte
 	var articles []byte
@@ -68,5 +68,6 @@ func (s *SQLiteStore) GetTriage(ctx context.Context, id int64) (Triage, error) {
 	if err != nil {
 		return Triage{}, fmt.Errorf("unmarshal articles: %w", err)
 	}
+	t.TicketID = ticketID
 	return t, nil
 }

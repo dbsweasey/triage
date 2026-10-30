@@ -35,7 +35,7 @@ func TestGetTriage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
-	got, err := s.GetTriage(t.Context(), ticket.ID)
+	got, err := s.GetLatestTriage(t.Context(), ticket.ID)
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
@@ -54,7 +54,7 @@ func TestGetTriage(t *testing.T) {
 	if !slices.Equal(got.ArticleIDs, want.ArticleIDs) {
 		t.Errorf("articleIds = %v, want %v", got.ArticleIDs, want.ArticleIDs)
 	}
-	if !slices.Equal(got.Steps, got.Steps) {
+	if !slices.Equal(got.Steps, want.Steps) {
 		t.Errorf("steps = %v, want %v", got.Steps, want.Steps)
 	}
 
@@ -64,7 +64,7 @@ func TestGetTriage(t *testing.T) {
 	triage.Summary = "summary3"
 	want, _ = s.CreateTriage(t.Context(), triage)
 
-	got, err = s.GetTriage(t.Context(), want.TicketID)
+	got, err = s.GetLatestTriage(t.Context(), want.TicketID)
 	if err != nil {
 		t.Fatalf("err = %v, want nil", err)
 	}
@@ -76,7 +76,7 @@ func TestGetTriage(t *testing.T) {
 	}
 
 	// No triage with given ticket ID
-	_, err = s.GetTriage(t.Context(), 2)
+	_, err = s.GetLatestTriage(t.Context(), 2)
 	if !errors.Is(err, ErrNotFound) {
 		t.Errorf("err = %v, want %v", err, ErrNotFound)
 	}

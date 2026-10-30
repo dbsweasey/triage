@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"triage/internal/store"
+	"triage/internal/triage"
 )
 
 type fakeKB struct {
@@ -44,8 +45,28 @@ func (s *fakeKB) SearchArticles(ctx context.Context, text string, limit int) ([]
 	return s.articles, nil
 }
 
-func newTestServer(ts ticketStore, ks kbStore) http.Handler {
-	srv := &server{tickets: ts, articles: ks}
+type fakeTriages struct {
+	triages []store.Triage
+}
+
+func (s *fakeTriages) GetLatestTriage(ctx context.Context, ticketID int64) (store.Triage, error) {
+	return s.triages[0], nil
+}
+
+func (s *fakeTriages) CreateTriage(ctx context.Context, t store.Triage) (store.Triage, error) {
+	t.ID = int64(len(s.triages)) + 1
+	s.triages = append(s.triages, t)
+	return t, nil
+}
+
+type fakeTriager struct{}
+
+func (s *fakeTriager) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (triage.Result, error) {
+	return triage.Result{Priority: "med", Category: "network", Summary: "internet went out", Steps: []string{"Restart", "Reconnect"}, ArticleIDs: []int64{1, 4}}, nil
+}
+
+func newTestServer(ts ticketStore, ks kbStore, trs triageStore, tri triager) http.Handler {
+	srv := &server{tickets: ts, articles: ks, triages: trs, triager: tri}
 	return srv.routes()
 }
 
@@ -60,7 +81,7 @@ func TestCreateTicket(t *testing.T) {
 		{"invalid json", `{"title":`, http.StatusBadRequest},
 	}
 
-	mux := newTestServer(store.NewMemoryStore(), initFakeKB())
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -87,7 +108,7 @@ func TestGetTicket(t *testing.T) {
 		{"invalid id", "/api/tickets/abc", http.StatusBadRequest, "", true},
 	}
 
-	mux := newTestServer(store.NewMemoryStore(), initFakeKB())
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
 	createTicket(t, mux, "test")
 
 	for _, tc := range tests {
@@ -131,7 +152,7 @@ func TestGetTicket(t *testing.T) {
 }
 
 func TestListTickets(t *testing.T) {
-	mux := newTestServer(store.NewMemoryStore(), initFakeKB())
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
 	for range 2 {
 		createTicket(t, mux, "t")
 	}
@@ -167,7 +188,7 @@ func TestGetArticle(t *testing.T) {
 		{"invalid id", "/api/kb/abc", http.StatusBadRequest, "", 0},
 	}
 
-	mux := newTestServer(nil, initFakeKB())
+	mux := newTestServer(nil, initFakeKB(), &fakeTriages{}, &fakeTriager{})
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -228,7 +249,7 @@ func TestListArticles(t *testing.T) {
 	}
 
 	kb := initFakeKB()
-	mux := newTestServer(store.NewMemoryStore(), kb)
+	mux := newTestServer(store.NewMemoryStore(), kb, &fakeTriages{}, &fakeTriager{})
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -264,8 +285,34 @@ func TestListArticles(t *testing.T) {
 	}
 }
 
+func TestCreateTriage(t *testing.T) {
+	// Build
+	tests := []struct {
+		name       string
+		path       string
+		wantStatus int
+	}{
+		{"invalid something", "/api/ticket/1/triage", http.StatusOK},
+	}
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, strings.NewReader(""))
+			rec := httptest.NewRecorder()
+			mux.ServeHTTP(rec, req)
+			if rec.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", rec.Code, tc.wantStatus)
+			}
+		})
+	}
+}
+
+func TestGetLatestTriage(t *testing.T) {
+	// Build
+}
+
 func TestHealth(t *testing.T) {
-	mux := newTestServer(store.NewMemoryStore(), initFakeKB())
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -311,6 +358,14 @@ func (failingStore) SearchArticles(context.Context, string, int) ([]store.Articl
 	return nil, errors.New("disk on fire!")
 }
 
+func (failingStore) GetLatestTriage(context.Context, int64) (store.Triage, error) {
+	return store.Triage{}, errors.New("disk on fire!")
+}
+
+func (failingStore) CreateTriage(context.Context, store.Triage) (store.Triage, error) {
+	return store.Triage{}, errors.New("disk on fire!")
+}
+
 func Test500Errors(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -326,7 +381,7 @@ func Test500Errors(t *testing.T) {
 		{"search articles", http.MethodGet, "/api/kb?q=vpn", ""},
 	}
 
-	mux := newTestServer(failingStore{}, failingStore{})
+	mux := newTestServer(failingStore{}, failingStore{}, failingStore{}, nil)
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

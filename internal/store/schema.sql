@@ -44,3 +44,5 @@ CREATE TABLE IF NOT EXISTS triages (
     article_ids TEXT NOT NULL,
     created_at DATETIME NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS triages_ticket_id ON triages(ticket_id);

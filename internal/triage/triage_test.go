@@ -78,6 +78,7 @@ func TestGetResultHappy(t *testing.T) {
 
 	c := NewOpenAIClient("test-key", "fake-model")
 	c.client = srv.Client()
+	c.baseURL = srv.URL
 
 	res, err := c.GetResult(t.Context(), store.Ticket{Title: "VPN is broken", Description: "My VPN fails to connect"}, []store.Article{{Title: "VPN issues", Body: "Uninstall and reinstall is the simple fix to VPN issues"}})
 	if err != nil {
@@ -127,6 +128,7 @@ func TestGetResultBad(t *testing.T) {
 			}))
 			c := NewOpenAIClient("test-key", "fake-model")
 			c.client = srv.Client()
+			c.baseURL = srv.URL
 
 			_, err := c.GetResult(t.Context(), store.Ticket{Title: "VPN is broken", Description: "My VPN fails to connect"}, []store.Article{{Title: "VPN issues", Body: "Uninstall and reinstall is the simple fix to VPN issues"}})
 			if !errors.Is(err, tc.wantError) {

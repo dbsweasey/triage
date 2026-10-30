@@ -29,14 +29,20 @@ type kbStore interface {
 }
 
 type triageStore interface {
-	GetTriage(ctx context.Context, id int64) (store.Triage, error)
+	GetLatestTriage(ctx context.Context, id int64) (store.Triage, error)
 	CreateTriage(ctx context.Context, t store.Triage) (store.Triage, error)
+}
+
+type triager interface {
+	GetResult(ctx context.Context, t store.Ticket, as []store.Article) (triage.Result, error)
 }
 
 var (
 	_ ticketStore = (*store.MemoryStore)(nil)
 	_ ticketStore = (*store.SQLiteStore)(nil)
 	_ kbStore     = (*store.SQLiteStore)(nil)
+	_ triageStore = (*store.SQLiteStore)(nil)
+	_ triager     = (*triage.OpenAIClient)(nil)
 )
 
 type healthResponse struct {
@@ -48,7 +54,7 @@ type server struct {
 	tickets  ticketStore
 	articles kbStore
 	triages  triageStore
-	llm      *triage.OpenAIClient
+	triager  triager
 }
 
 type createTicketRequest struct {
@@ -65,42 +71,38 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "OK", Time: time.Now()})
 }
 
-func (s *server) handleTriage(w http.ResponseWriter, r *http.Request) {
-	var input createTriageRequest
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid ticket id")
-		return
-	}
-	ticket, err := s.tickets.Get(r.Context(), input.TicketId)
-	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, "ticket with id "+strconv.FormatInt(input.TicketId, 10)+" not found.")
-		return
-	}
+func (s *server) handleCreateTriage(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
 	if err != nil {
-		log.Printf("get ticket: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeError(w, http.StatusBadRequest, "invalid id. id must be an integer")
+		return
+	}
+	ticket, err := s.tickets.Get(r.Context(), id)
+	if err != nil {
+		writeErr(w, r, err)
 		return
 	}
 	articles, err := s.articles.SearchArticles(r.Context(), ticket.Title+" "+ticket.Description, 5)
 	if err != nil {
-		log.Printf("search articles: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
-	result, err := s.llm.GetResult(r.Context(), ticket, articles)
+	result, err := s.triager.GetResult(r.Context(), ticket, articles)
 	if err != nil {
-		log.Printf("call llm: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 	if err := triage.ValidateResult(result, articles); err != nil {
-		log.Printf("validate result: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
-	triage, err := s.triages.CreateTriage(r.Context(), store.Triage{TicketID: ticket.ID, Priority: result.Priority, Category: result.Category, Summary: result.Summary, Steps: result.Steps, ArticleIDs: result.ArticleIDs})
+	tr, err := s.triages.CreateTriage(r.Context(), store.Triage{TicketID: ticket.ID, Priority: result.Priority, Category: result.Category, Summary: result.Summary, Steps: result.Steps, ArticleIDs: result.ArticleIDs})
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
 
-	writeJSON(w, http.StatusCreated, triage)
+	writeJSON(w, http.StatusCreated, tr)
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -113,6 +115,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func writeErr(w http.ResponseWriter, r *http.Request, err error) {
+	status, msg := http.StatusInternalServerError, "internal server error"
+
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		status, msg = http.StatusNotFound, "not found"
+	case errors.Is(err, triage.ErrRefused):
+		status, msg = http.StatusUnprocessableEntity, "the model declined to triage this ticket"
+	case errors.Is(err, triage.ErrUpstream), errors.Is(err, triage.ErrBadResponse), errors.Is(err, triage.ErrIncomplete):
+		status, msg = http.StatusBadGateway, "triage service failed"
+	}
+
+	if status >= 500 {
+		log.Printf("%s %s: %v", r.Method, r.URL.Path, err)
+	}
+	writeError(w, status, msg)
 }
 
 func parseID(r *http.Request) (int64, error) {
@@ -133,7 +153,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("GET /api/kb/{id}", s.handleGetArticle)
 	mux.HandleFunc("GET /api/kb", s.handleListArticles)
 
-	mux.HandleFunc("POST /api/triage", s.handleTriage)
+	mux.HandleFunc("POST /api/tickets/{id}/triage", s.handleCreateTriage)
 
 	return mux
 }
@@ -154,9 +174,9 @@ func main() {
 
 	defer st.Close()
 
-	llm := triage.NewOpenAIClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
+	tri := triage.NewOpenAIClient(cfg.OpenAIAPIKey, cfg.OpenAIModel)
 
-	srv := &server{tickets: st, articles: st, triages: st, llm: llm}
+	srv := &server{tickets: st, articles: st, triages: st, triager: tri}
 	mux := srv.routes()
 
 	log.Printf("listening on %s", address)

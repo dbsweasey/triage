@@ -38,7 +38,7 @@ func scanArticle(s scanner) (Article, error) {
 	return a, err
 }
 
-func seedArticles(ctx context.Context, s *SQLiteStore) error {
+func (s *SQLiteStore) seedArticles(ctx context.Context) error {
 
 	var count int
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM kb_articles`).Scan(&count); err != nil {

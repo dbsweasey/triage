@@ -16,8 +16,20 @@ import (
 	"triage/internal/store"
 )
 
-//go:embed schema.json
-var outputSchema json.RawMessage
+var (
+	Priorities   = []string{"low", "medium", "high"}
+	Categories   = []string{"account", "email", "hardware", "software", "network", "security", "other"}
+	outputSchema = mustBuildSchema()
+)
+
+type jsonSchema struct {
+	Type                 string                 `json:"type"`
+	Enum                 []string               `json:"enum,omitempty"`
+	Items                *jsonSchema            `json:"items,omitempty"`
+	Properties           map[string]*jsonSchema `json:"properties,omitempty"`
+	Required             []string               `json:"required,omitempty"`
+	AdditionalProperties *bool                  `json:"additionalProperties,omitempty"`
+}
 
 type requestBody struct {
 	Model        string     `json:"model"`
@@ -68,8 +80,24 @@ type OpenAIClient struct {
 	client  *http.Client
 }
 
-type Triager interface {
-	GetResult(ctx context.Context, t store.Ticket, as []store.Article) (Result, error)
+func mustBuildSchema() json.RawMessage {
+	s := jsonSchema{
+		Type: "object",
+		Properties: map[string]*jsonSchema{
+			"priority":   {Type: "string", Enum: Priorities},
+			"category":   {Type: "string", Enum: Categories},
+			"summary":    {Type: "string"},
+			"steps":      {Type: "array", Items: &jsonSchema{Type: "string"}},
+			"articleIds": {Type: "array", Items: &jsonSchema{Type: "integer"}},
+		},
+		Required:             []string{"priority", "category", "summary", "steps", "articleIds"},
+		AdditionalProperties: new(false),
+	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 func buildPrompt(t store.Ticket, as []store.Article) (string, string) {
@@ -77,11 +105,13 @@ func buildPrompt(t store.Ticket, as []store.Article) (string, string) {
 # Role
 You are an ITSM triage agent. Given details from a support ticket and knowledge
 base articles, you must determine the incident priority, its category,
-a summary of how to resolve, and specific resolution steps.
+a summary of the issue, and specific resolution steps.
 
 # Input
 You will receive a ticket, which contains a title and description. This
-is how you determine the issue to be resolved and its priority.
+is how you determine the issue to be resolved and its priority. Priority 
+must be decided based on how many users are affected, known workarounds, and
+business criticallity.
 You will also receive a list of articles. These have already been retrieved.
 Use these as reference to create resolution steps and summary.
 
@@ -144,7 +174,7 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 
 	var response responseBody
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return Result{}, fmt.Errorf("%w: decode: %v", ErrBadResponse, err)
+		return Result{}, fmt.Errorf("%w: decode: %w", ErrBadResponse, err)
 	}
 	var result Result
 	if response.Status != "completed" {
@@ -171,10 +201,10 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 }
 
 func ValidateResult(r Result, as []store.Article) error {
-	if !slices.Contains([]string{"low", "medium", "high"}, strings.ToLower(r.Priority)) {
+	if !slices.Contains(Priorities, r.Priority) {
 		return fmt.Errorf("%w: invalid priority %v", ErrBadResponse, r.Priority)
 	}
-	if !slices.Contains([]string{"hardware", "software", "security", "ai", "network", "other"}, strings.ToLower(r.Category)) {
+	if !slices.Contains(Categories, r.Category) {
 		return fmt.Errorf("%w: invalid category %v", ErrBadResponse, r.Category)
 	}
 	if len(r.Steps) == 0 {
