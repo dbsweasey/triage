@@ -63,6 +63,14 @@ func (s *fakeTriages) CreateTriage(ctx context.Context, t store.Triage) (store.T
 	return t, nil
 }
 
+func (s *fakeTriages) LatestTriages(context.Context) (map[int64]store.Triage, error) {
+	latest := make(map[int64]store.Triage)
+	for _, tr := range s.triages {
+		latest[tr.TicketID] = tr
+	}
+	return latest, nil
+}
+
 type fakeTriager struct{}
 
 func (s *fakeTriager) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (triage.Result, error) {
@@ -163,6 +171,7 @@ func TestListTickets(t *testing.T) {
 	for range 2 {
 		createTicket(t, mux, "t")
 	}
+	createTriage(t, mux, 1)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/tickets", nil)
 	rec := httptest.NewRecorder()
@@ -170,7 +179,7 @@ func TestListTickets(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("code = %d, want 200", rec.Code)
 	}
-	var got []store.Ticket
+	var got []ticketListItem
 	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -179,6 +188,12 @@ func TestListTickets(t *testing.T) {
 	}
 	if got[0].ID != 2 {
 		t.Errorf("ID = %d, want 2", got[0].ID)
+	}
+	if got[0].ID == 1 && got[0].Triage == nil {
+		t.Errorf("triage = nil, want non-nil")
+	}
+	if got[1].ID == 2 && got[1].Triage != nil {
+		t.Errorf("triage = not nil, want nil")
 	}
 }
 
@@ -412,6 +427,10 @@ func (failingStore) GetLatestTriage(context.Context, int64) (store.Triage, error
 
 func (failingStore) CreateTriage(context.Context, store.Triage) (store.Triage, error) {
 	return store.Triage{}, errors.New("disk on fire!")
+}
+
+func (failingStore) LatestTriages(context.Context) (map[int64]store.Triage, error) {
+	return nil, errors.New("disk on fire!")
 }
 
 func Test500Errors(t *testing.T) {

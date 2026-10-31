@@ -16,6 +16,11 @@ type SQLiteStore struct {
 	db *sql.DB
 }
 
+type ticketListItem struct {
+	Ticket
+	Triage *Triage `json:"triage"`
+}
+
 //go:embed schema.sql
 var schema string
 
@@ -133,4 +138,9 @@ func (s *SQLiteStore) List(ctx context.Context) ([]Ticket, error) {
 	}
 
 	return list, nil
+}
+
+func (s *SQLiteStore) UpdateStatus(ctx context.Context, id int64, status string) (Ticket, error) {
+	// TODO implement
+	return Ticket{}, nil
 }

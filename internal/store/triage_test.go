@@ -81,3 +81,33 @@ func TestGetTriage(t *testing.T) {
 		t.Errorf("err = %v, want %v", err, ErrNotFound)
 	}
 }
+
+func TestLatestTriages(t *testing.T) {
+	s := createTestDb(t)
+
+	ticket := createTicket(t, s, Ticket{Title: "test", Description: "test"})
+	createTicket(t, s, Ticket{Title: "test2", Description: "test2"})
+
+	_, err := s.CreateTriage(t.Context(), Triage{TicketID: ticket.ID, Priority: "high", Category: "network", Summary: "Restart your VPN", Steps: []string{"1. Restart"}, ArticleIDs: []int64{}})
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	want, err := s.CreateTriage(t.Context(), Triage{TicketID: ticket.ID, Priority: "medium", Category: "software", Summary: "VPN not working", Steps: []string{"1. Restart", "2. Try again"}, ArticleIDs: []int64{}})
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	triages, err := s.LatestTriages(t.Context())
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if len(triages) != 1 {
+		t.Fatalf("len(got) = %d, want 1", len(triages))
+	}
+	got, ok := triages[want.TicketID]
+	if !ok {
+		t.Fatalf("ok = false, want true")
+	}
+	if got.ID != want.ID {
+		t.Errorf("id = %d, want %d", got.ID, want.ID)
+	}
+}

@@ -10,6 +10,11 @@ import (
 	"triage/internal/store"
 )
 
+type ticketListItem struct {
+	store.Ticket
+	Triage *store.Triage `json:"triage"`
+}
+
 func (s *server) handleCreateTicket(w http.ResponseWriter, r *http.Request) {
 	var input createTicketRequest
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
@@ -52,11 +57,27 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
-	list, err := s.tickets.List(r.Context())
+	tickets, err := s.tickets.List(r.Context())
 	if err != nil {
 		log.Printf("list tickets: %v", err)
 		writeError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
-	writeJSON(w, http.StatusOK, list)
+
+	latest, err := s.triages.LatestTriages(r.Context())
+	if err != nil {
+		log.Printf("list tickets: %v", err)
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	items := make([]ticketListItem, 0, len(tickets))
+	for _, t := range tickets {
+		item := ticketListItem{Ticket: t}
+		if tr, ok := latest[t.ID]; ok {
+			item.Triage = &tr
+		}
+		items = append(items, item)
+	}
+	writeJSON(w, http.StatusOK, items)
 }

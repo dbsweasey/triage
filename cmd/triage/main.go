@@ -31,6 +31,7 @@ type kbStore interface {
 type triageStore interface {
 	GetLatestTriage(ctx context.Context, id int64) (store.Triage, error)
 	CreateTriage(ctx context.Context, t store.Triage) (store.Triage, error)
+	LatestTriages(ctx context.Context) (map[int64]store.Triage, error)
 }
 
 type triager interface {
@@ -48,6 +49,11 @@ var (
 type healthResponse struct {
 	Status string    `json:"status"`
 	Time   time.Time `json:"time"`
+}
+
+type triageResponse struct {
+	store.Triage
+	Articles []store.Article `json:"articles"`
 }
 
 type server struct {
@@ -97,8 +103,17 @@ func (s *server) handleCreateTriage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
+	var usedArticles []store.Article
+	for _, a := range result.ArticleIDs {
+		article, err := s.articles.GetArticle(r.Context(), a)
+		if err != nil {
+			writeErr(w, r, err)
+			return
+		}
+		usedArticles = append(usedArticles, article)
+	}
 
-	writeJSON(w, http.StatusCreated, tr)
+	writeJSON(w, http.StatusCreated, triageResponse{tr, usedArticles})
 }
 
 func (s *server) handleGetLatestTriage(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +131,16 @@ func (s *server) handleGetLatestTriage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, r, err)
 		return
+	}
+
+	var usedArticles []store.Article
+	for _, a := range tr.ArticleIDs {
+		article, err := s.articles.GetArticle(r.Context(), a)
+		if err != nil {
+			writeErr(w, r, err)
+			return
+		}
+		usedArticles = append(usedArticles, article)
 	}
 
 	writeJSON(w, http.StatusOK, tr)
