@@ -141,6 +141,24 @@ func (s *SQLiteStore) List(ctx context.Context) ([]Ticket, error) {
 }
 
 func (s *SQLiteStore) UpdateStatus(ctx context.Context, id int64, status string) (Ticket, error) {
-	// TODO implement
-	return Ticket{}, nil
+	q := `
+		UPDATE tickets
+		SET status = ?
+		WHERE id = ?`
+
+	res, err := s.db.ExecContext(ctx, q, status, id)
+	if err != nil {
+		return Ticket{}, fmt.Errorf("update ticket %d: %w", id, err)
+	}
+
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return Ticket{}, fmt.Errorf("update ticket %d: %w", id, err)
+	}
+
+	if affected == 0 {
+		return Ticket{}, ErrNotFound
+	}
+
+	return s.Get(ctx, id)
 }

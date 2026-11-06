@@ -66,3 +66,16 @@ func (s *MemoryStore) List(ctx context.Context) ([]Ticket, error) {
 	}
 	return list, nil
 }
+
+func (s *MemoryStore) UpdateStatus(ctx context.Context, id int64, status string) (Ticket, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	t, ok := s.tickets[id]
+	if !ok {
+		return Ticket{}, ErrNotFound
+	}
+	t.Status = status
+	s.tickets[id] = t
+	return t, nil
+}

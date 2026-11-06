@@ -20,6 +20,7 @@ type ticketStore interface {
 	Create(ctx context.Context, t store.Ticket) (store.Ticket, error)
 	Get(ctx context.Context, id int64) (store.Ticket, error)
 	List(ctx context.Context) ([]store.Ticket, error)
+	UpdateStatus(ctx context.Context, id int64, status string) (store.Ticket, error)
 }
 
 type kbStore interface {
@@ -63,12 +64,6 @@ type server struct {
 	triager  triager
 }
 
-type createTicketRequest struct {
-	Title          string `json:"title"`
-	Description    string `json:"description"`
-	RequesterEmail string `json:"requesterEmail"`
-}
-
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "OK", Time: time.Now()})
 }
@@ -103,14 +98,11 @@ func (s *server) handleCreateTriage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, err)
 		return
 	}
-	var usedArticles []store.Article
-	for _, a := range result.ArticleIDs {
-		article, err := s.articles.GetArticle(r.Context(), a)
-		if err != nil {
-			writeErr(w, r, err)
-			return
-		}
-		usedArticles = append(usedArticles, article)
+
+	usedArticles, err := s.getArticlesForTriage(r, tr.ArticleIDs)
+	if err != nil {
+		writeErr(w, r, err)
+		return
 	}
 
 	writeJSON(w, http.StatusCreated, triageResponse{tr, usedArticles})
@@ -133,17 +125,28 @@ func (s *server) handleGetLatestTriage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var usedArticles []store.Article
-	for _, a := range tr.ArticleIDs {
+	usedArticles, err := s.getArticlesForTriage(r, tr.ArticleIDs)
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, triageResponse{tr, usedArticles})
+}
+
+func (s *server) getArticlesForTriage(r *http.Request, ids []int64) ([]store.Article, error) {
+	var usedArticles = make([]store.Article, 0, len(ids))
+	for _, a := range ids {
 		article, err := s.articles.GetArticle(r.Context(), a)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
 		if err != nil {
-			writeErr(w, r, err)
-			return
+			return usedArticles, err
 		}
 		usedArticles = append(usedArticles, article)
 	}
-
-	writeJSON(w, http.StatusOK, tr)
+	return usedArticles, nil
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -190,6 +193,7 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("POST /api/tickets", s.handleCreateTicket)
 	mux.HandleFunc("GET /api/tickets/{id}", s.handleGetTicket)
 	mux.HandleFunc("GET /api/tickets", s.handleListTickets)
+	mux.HandleFunc("PATCH /api/tickets/{id}/status", s.handleUpdateTicketStatus)
 
 	mux.HandleFunc("GET /api/kb/{id}", s.handleGetArticle)
 	mux.HandleFunc("GET /api/kb", s.handleListArticles)

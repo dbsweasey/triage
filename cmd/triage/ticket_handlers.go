@@ -3,8 +3,8 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"triage/internal/store"
@@ -13,6 +13,16 @@ import (
 type ticketListItem struct {
 	store.Ticket
 	Triage *store.Triage `json:"triage"`
+}
+
+type createTicketRequest struct {
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	RequesterEmail string `json:"requesterEmail"`
+}
+
+type updateTicketStatusRequest struct {
+	Status string `json:"status"`
 }
 
 func (s *server) handleCreateTicket(w http.ResponseWriter, r *http.Request) {
@@ -29,8 +39,7 @@ func (s *server) handleCreateTicket(w http.ResponseWriter, r *http.Request) {
 	t, err := s.tickets.Create(r.Context(), t)
 
 	if err != nil {
-		log.Printf("create ticket: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 
@@ -49,8 +58,7 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("get ticket: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, t)
@@ -59,15 +67,13 @@ func (s *server) handleGetTicket(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 	tickets, err := s.tickets.List(r.Context())
 	if err != nil {
-		log.Printf("list tickets: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 
 	latest, err := s.triages.LatestTriages(r.Context())
 	if err != nil {
-		log.Printf("list tickets: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 
@@ -80,4 +86,38 @@ func (s *server) handleListTickets(w http.ResponseWriter, r *http.Request) {
 		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, items)
+}
+
+func (s *server) handleUpdateTicketStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id. id must be an integer")
+		return
+	}
+
+	var input updateTicketStatusRequest
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid schema for update ticket status")
+		return
+	}
+	if input.Status == "" {
+		writeError(w, http.StatusBadRequest, "status is required")
+		return
+	}
+	if !slices.Contains(store.ValidStatuses, input.Status) {
+		writeError(w, http.StatusBadRequest, "invalid status")
+		return
+	}
+
+	t, err := s.tickets.UpdateStatus(r.Context(), id, input.Status)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "ticket with id "+strconv.FormatInt(id, 10)+" not found.")
+		return
+	}
+	if err != nil {
+		writeErr(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, t)
 }

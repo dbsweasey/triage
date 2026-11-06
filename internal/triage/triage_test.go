@@ -172,6 +172,44 @@ func TestValidateResponse(t *testing.T) {
 	}
 }
 
+func TestFakeTriage(t *testing.T) {
+	articles := []store.Article{{ID: 1, Title: "Test", Body: "test", Tags: []string{}}, {ID: 2, Title: "Test", Body: "test", Tags: []string{}}}
+	tests := []struct {
+		name    string
+		ticket  store.Ticket
+		want    Result
+		wantErr error
+	}{
+		{"no network", store.Ticket{Title: "VPN is broken", Description: "My VPN fails to connect"}, Result{Priority: "low", Category: "software", Summary: "An issue with user software", ArticleIDs: []int64{1}, Steps: []string{"Restart your computer", "Try again", "Talk to IT if still not working"}}, nil},
+		{"network issue", store.Ticket{Title: "VPN is broken", Description: "My VPN fails to connect and my network is down"}, Result{Priority: "high", Category: "network", Summary: "An issue with user network", ArticleIDs: []int64{1}, Steps: []string{"Restart your computer", "Try again", "Talk to IT if still not working"}}, nil},
+		{"hardware issue", store.Ticket{Title: "VPN is broken", Description: "My VPN fails to connect and my hardware is broken"}, Result{Priority: "medium", Category: "hardware", Summary: "An issue with user hardware", ArticleIDs: []int64{1}, Steps: []string{"Restart your computer", "Try again", "Talk to IT if still not working"}}, nil},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			f := &Fake{}
+			got, err := f.GetResult(t.Context(), tc.ticket, articles)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("err = %v, want %v", err, tc.wantErr)
+			}
+			if got.Priority != tc.want.Priority {
+				t.Errorf("priority = %v, want %v", got.Priority, tc.want.Priority)
+			}
+			if got.Category != tc.want.Category {
+				t.Errorf("category = %v, want %v", got.Category, tc.want.Category)
+			}
+			if got.Summary != tc.want.Summary {
+				t.Errorf("summary = %v, want %v", got.Summary, tc.want.Summary)
+			}
+			if len(got.ArticleIDs) != len(tc.want.ArticleIDs) {
+				t.Errorf("len(articleIds) = %v, want %v", len(got.ArticleIDs), len(tc.want.ArticleIDs))
+			}
+			if len(got.Steps) != len(tc.want.Steps) {
+				t.Errorf("len(steps) = %v, want %v", len(got.Steps), len(tc.want.Steps))
+			}
+		})
+	}
+}
+
 func buildResponse(issue string) Result {
 	r := Result{Priority: "high", Category: "network", Summary: "test", Steps: []string{"1. test", "2. test"}, ArticleIDs: []int64{1, 2}}
 	if issue == "priority" {

@@ -33,5 +33,7 @@ type Triage struct {
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+var ValidStatuses = []string{"open", "closed", "in_progress", "resolved"}
+
 // ErrNotFound acts as a sentinel error for missing item
 var ErrNotFound = errors.New("not found")

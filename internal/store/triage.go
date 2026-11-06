@@ -28,7 +28,13 @@ func scanTriage(s scanner) (Triage, error) {
 	if err != nil {
 		return Triage{}, fmt.Errorf("unmarshal articles: %w", err)
 	}
-	return t, err
+	if t.ArticleIDs == nil {
+		t.ArticleIDs = []int64{}
+	}
+	if t.Steps == nil {
+		t.Steps = []string{}
+	}
+	return t, nil
 }
 
 // CreateTriage saves a triage result to the store
@@ -95,13 +101,13 @@ func (s *SQLiteStore) LatestTriages(ctx context.Context) (map[int64]Triage, erro
 
 	for rows.Next() {
 		t, err := scanTriage(rows)
-		if errors.Is(err, ErrNotFound) {
-			continue
-		}
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("latest triages: %w", err)
 		}
 		triages[t.TicketID] = t
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("latest triages: %w", err)
 	}
 	return triages, nil
 }

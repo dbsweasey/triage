@@ -197,6 +197,26 @@ func TestListTickets(t *testing.T) {
 	}
 }
 
+func TestUpdateTicketStatus(t *testing.T) {
+	mux := newTestServer(store.NewMemoryStore(), initFakeKB(), &fakeTriages{}, &fakeTriager{})
+	createTicket(t, mux, "t") // ID 1
+
+	req := httptest.NewRequest(http.MethodPatch, "/api/tickets/1/status", strings.NewReader(`{"status": "closed"}`))
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200", rec.Code)
+	}
+
+	var got store.Ticket
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Status != "closed" {
+		t.Errorf("status = %q, want closed", got.Status)
+	}
+}
+
 func TestGetArticle(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -417,6 +437,10 @@ func (failingStore) ListArticles(context.Context) ([]store.Article, error) {
 	return nil, errors.New("disk on fire!")
 }
 
+func (failingStore) UpdateStatus(context.Context, int64, string) (store.Ticket, error) {
+	return store.Ticket{}, errors.New("disk on fire!")
+}
+
 func (failingStore) SearchArticles(context.Context, string, int) ([]store.Article, error) {
 	return nil, errors.New("disk on fire!")
 }
@@ -443,6 +467,7 @@ func Test500Errors(t *testing.T) {
 		{"create ticket", http.MethodPost, "/api/tickets", `{"title": "t", "description": "d"}`},
 		{"get ticket", http.MethodGet, "/api/tickets/1", ""},
 		{"list tickets", http.MethodGet, "/api/tickets", ""},
+		{"update ticket status", http.MethodPatch, "/api/tickets/1/status", `{"status": "closed"}`},
 		{"get article", http.MethodGet, "/api/kb/1", ""},
 		{"list articles", http.MethodGet, "/api/kb", ""},
 		{"search articles", http.MethodGet, "/api/kb?q=vpn", ""},

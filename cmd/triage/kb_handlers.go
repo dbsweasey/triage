@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"strconv"
 
@@ -21,8 +20,7 @@ func (s *server) handleGetArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
-		log.Printf("get article: %v", err)
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, a)
@@ -34,8 +32,7 @@ func (s *server) handleListArticles(w http.ResponseWriter, r *http.Request) {
 	if q == "" {
 		list, err := s.articles.ListArticles(r.Context())
 		if err != nil {
-			log.Printf("list articles: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			writeErr(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, list)
@@ -54,7 +51,7 @@ func (s *server) handleListArticles(w http.ResponseWriter, r *http.Request) {
 	}
 	list, err := s.articles.SearchArticles(r.Context(), q, limit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		writeErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, list)

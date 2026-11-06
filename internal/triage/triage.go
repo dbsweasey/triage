@@ -140,11 +140,13 @@ Here are the relevant knowledge articles:
 	return systemPrompt, userPrompt
 }
 
+// NewOpenAIClient creates a new OpenAIClient with the given API key and model
 func NewOpenAIClient(key string, model string) *OpenAIClient {
 	client := http.Client{Timeout: 30 * time.Second}
 	return &OpenAIClient{apiKey: key, model: model, baseURL: "https://api.openai.com/v1", client: &client}
 }
 
+// GetResult calls the OpenAI API to get a triage result for a ticket and articles
 func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (Result, error) {
 
 	sys, user := buildPrompt(t, as)
@@ -201,6 +203,7 @@ func (c *OpenAIClient) GetResult(ctx context.Context, t store.Ticket, as []store
 	return Result{}, fmt.Errorf("%w: no result found", ErrBadResponse)
 }
 
+// ValidateResult checks that the result from the triage client is valid and matches the articles provided
 func ValidateResult(r Result, as []store.Article) error {
 	if !slices.Contains(Priorities, r.Priority) {
 		return fmt.Errorf("%w: invalid priority %v", ErrBadResponse, r.Priority)
@@ -223,8 +226,9 @@ func ValidateResult(r Result, as []store.Article) error {
 
 type Fake struct{}
 
-func (s *Fake) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (Result, error) {
-	var articleIds []int64
+// GetResult is a fake implementation of the triage client for testing. Returns deterministic results
+func (Fake) GetResult(ctx context.Context, t store.Ticket, as []store.Article) (Result, error) {
+	var articleIds = make([]int64, 0, len(as))
 	for i, a := range as {
 		if i == 1 {
 			break
@@ -233,10 +237,10 @@ func (s *Fake) GetResult(ctx context.Context, t store.Ticket, as []store.Article
 	}
 	priority := "low"
 	category := "software"
-	if strings.Contains(t.Description, "network") {
+	if strings.Contains(strings.ToLower(t.Description), "network") || strings.Contains(strings.ToLower(t.Title), "network") {
 		priority = "high"
 		category = "network"
-	} else if strings.Contains(t.Description, "hardware") {
+	} else if strings.Contains(strings.ToLower(t.Description), "hardware") || strings.Contains(strings.ToLower(t.Title), "hardware") {
 		priority = "medium"
 		category = "hardware"
 	}

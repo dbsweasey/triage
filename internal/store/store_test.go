@@ -12,6 +12,7 @@ type storeUnderTest interface {
 	Create(ctx context.Context, t Ticket) (Ticket, error)
 	Get(ctx context.Context, id int64) (Ticket, error)
 	List(ctx context.Context) ([]Ticket, error)
+	UpdateStatus(ctx context.Context, id int64, status string) (Ticket, error)
 }
 
 func TestMemoryStore(t *testing.T) {
@@ -111,6 +112,23 @@ func runStoreTests(t *testing.T, newStore func(t *testing.T) storeUnderTest) {
 		}
 		if got[0].ID != 3 {
 			t.Errorf("ID = %d, want 3", got[0].ID)
+		}
+	})
+
+	t.Run("UpdateStatus", func(t *testing.T) {
+		s := newStore(t)
+
+		got := createTicket(t, s, Ticket{Title: "x"})
+		if got.Status != "open" {
+			t.Fatalf("status = %v, want open", got.Status)
+		}
+
+		got, err := s.UpdateStatus(t.Context(), got.ID, "closed")
+		if err != nil {
+			t.Fatalf("err = %v, want nil", err)
+		}
+		if got.Status != "closed" {
+			t.Errorf("status = %v, want closed", got.Status)
 		}
 	})
 
